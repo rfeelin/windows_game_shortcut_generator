@@ -1,16 +1,15 @@
-import sys, os, glob, shutil, time, re, mutagen, stat, subprocess, winshell, json, urllib2, pprint
+import sys, os, glob, shutil, time, re, stat, subprocess, winshell, json, urllib2, pprint
 from win32com.client import Dispatch
 
-#Varible stuffs
+#Variable stuff
 drmFreeGameFolders = [os.path.normpath('P:\Games\Non-Steam'), os.path.normpath('P:\Games\Pirate')]
-#drmFreeGameFolders = ['']
 steamGameFolders = [os.path.normpath('P:\Games\Steam\steamapps'),os.path.normpath('C:\Program Files (x86)\Steam\steamapps')]
-#steamGameFolders = [os.path.normpath('P:\Games\Steam\steamapps')]
+shortcutFolder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Game Shortcuts')
+#End variable stuff
 
 steamIdApiUrl = 'http://store.steampowered.com/api/appdetails?appids='
 steamShortcutBase = 'steam://rungameid/'
 
-shortcutFolder = os.path.normpath('P:\Games\Game Shortcuts')
 shortcutSteamImageFolder =  os.path.join(shortcutFolder, 'SteamIcons')
 shortcutsDump = os.path.join(shortcutFolder, 'ShortcutsDump.json')
 
@@ -18,20 +17,7 @@ acceptedFileTypes = ['.exe']
 newShortcuts = []
 existingShortcuts = []
 
-
-def clean_up(fix_me):
-    fix_me = fix_me.replace('<',' ')
-    fix_me = fix_me.replace('>',' ')
-    fix_me = fix_me.replace(':','')
-    fix_me = fix_me.replace('"','')
-    fix_me = fix_me.replace('/',' ')
-    fix_me = fix_me.replace("\\",' ')
-    fix_me = fix_me.replace('|',' ')
-    fix_me = fix_me.replace('?',' ')
-    fix_me = fix_me.replace('*',' ')
-    fix_me = fix_me.strip()
-    return fix_me
-
+valid_chars = '-_.() abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
 
 #Open shortcutsDump
 if os.path.isfile(shortcutsDump):
@@ -58,21 +44,15 @@ newtargets = []
 for gameFolder in drmFreeGameFolders:
     for root, subFolders, files in os.walk(gameFolder, topdown=False):
         for fileName in files:
-            for acceptedFileType in acceptedFileTypes: 
-                if(fileName.find(acceptedFileType) != -1):
-                    target = os.path.abspath(os.path.join(root, fileName))
-                    targetExists = False
-                    for existingShortcut in existingShortcuts:
-                        if os.path.normpath(existingShortcut['target']) == target :
-                            targetExists = True
-                    if targetExists == False:
-                        print target
-                        newtargets.append(target)
+            if any(fileName.find(acceptedFileType) != -1 for acceptedFileType in acceptedFileTypes):
+                target = os.path.abspath(os.path.join(root, fileName))
+                if any(existingShortcut['target'] == target for existingShortcut in existingShortcuts):
+                    newtargets.append(target)
 
 
 #Get names for shortcuts/ignore
 for target in newtargets:
-    targetFolders = target.split('\\')
+    targetFolders = os.path.split(target)
     targetFolders = targetFolders[-7:]
     print '*******'
     print target
@@ -87,14 +67,14 @@ for target in newtargets:
         print "Not a number"
     newShortcut = {}
     newShortcut['target'] = target
-    newShortcut['workingDirectory'] = target.rpartition('\\')[0]
+    newShortcut['workingDirectory'] = os.path.split(target)[:-1]
     if( nameOption > 0 and nameOption < 8 ):
         shortcutName = targetFolders[nameOption-1] + '.lnk'
-        shortcutName = clean_up(shortcutName)
+        shortcutName = ''.join(c for c in shortcutName if c in valid_chars).strip()
         newShortcut['shortcut'] = os.path.join(shortcutFolder, shortcutName)
     elif (nameOption == 8):
         shortcutName = raw_input('Enter Custom Name: ') + '.lnk'
-        shortcutName = clean_up(shortcutName)
+        shortcutName = ''.join(c for c in shortcutName if c in valid_chars).strip()
         newShortcut['shortcut'] = os.path.join(shortcutFolder, shortcutName)
     elif (nameOption == 9):
         newShortcut['shortcut'] = ''
@@ -102,23 +82,18 @@ for target in newtargets:
         newShortcuts.append(newShortcut)
 
 
-#STEAM
+#Steam
 steamGameIds = []
 newSteamGameIds = []
 for gameFolder in steamGameFolders:
-    for fileName in os.listdir(gameFolder):
-        if(fileName.find('.acf') != -1):
-            targetExists = False
+     if any(fileName.find('.acf') != -1 for fileName in os.listdir(gameFolder)):
             steamGameId = fileName.strip('appmanifest_')
             steamGameId = steamGameId.strip('.acf')
             steamGameIds.append(steamGameId)
-            for existingShortcut in existingShortcuts:
-                if existingShortcut['target'] == (steamShortcutBase + steamGameId) :
-                    targetExists = True
-            if targetExists == False:
+            if any(existingShortcut['target'] == (steamShortcutBase + steamGameId) for existingShortcut in existingShortcuts):
                 newSteamGameIds.append(steamGameId)
 
-#clean up existingShortcuts
+#Clean up existingShortcuts
 print '****Clean Up Steam****'
 for existingShortcut in existingShortcuts:
     exists = False
@@ -137,7 +112,7 @@ for steamGameId in newSteamGameIds:
     steamGameInfo = json.loads(steamGameInfoDump)
     try:
         shortcutName = steamGameInfo[steamGameId]['data']['name']
-        shortcutName = clean_up(shortcutName)
+        shortcutName = ''.join(c for c in shortcutName if c in valid_chars).strip()
         print shortcutName
         #shortcutImageName = os.path.join(shortcutSteamImageFolder, (steamGameId + '.jpg') )
 
@@ -154,7 +129,7 @@ for steamGameId in newSteamGameIds:
         newShortcut['shortcut'] = os.path.join(shortcutFolder, (shortcutName + '.url'))
         newShortcuts.append(newShortcut) 
     except:
-        print 'no data for: ' + str(steamGameInfo )
+        print 'no data for: ' + str(steamGameInfo)
 
 
 #Generate shortcuts
