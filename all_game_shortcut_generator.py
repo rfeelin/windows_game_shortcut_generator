@@ -1,9 +1,10 @@
-import sys, os, glob, shutil, time, re, stat, subprocess, winshell, json, urllib2, pprint
-from win32com.client import Dispatch
+import sys, os, glob, shutil, time, re, stat, subprocess, json, urllib2, pprint
+#import sys, os, glob, shutil, time, re, stat, subprocess, winshell, json, urllib2, pprint
+#from win32com.client import Dispatch
 
 #Variable stuff
-drmFreeGameFolders = [os.path.normpath('P:\Games\Non-Steam'), os.path.normpath('P:\Games\Pirate')]
-steamGameFolders = [os.path.normpath('P:\Games\Steam\steamapps'),os.path.normpath('C:\Program Files (x86)\Steam\steamapps')]
+drmFreeGameFolders = []
+steamGameFolders = []
 shortcutFolder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Game Shortcuts')
 #End variable stuff
 
@@ -19,16 +20,20 @@ existingShortcuts = []
 
 valid_chars = '-_.() abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
 
+#Create Dir
+if not os.path.exists(shortcutFolder):
+    os.makedirs(shortcutFolder)
+
 #Open shortcutsDump
 if os.path.isfile(shortcutsDump):
     with open(shortcutsDump, 'r') as fp:
         existingShortcuts = json.load(fp)
 else:
-    with open(shortcutsDump, 'w') as fp:
-        fp.write('[]')
+    shortcutsDumpFile = file(shortcutsDump, 'w')
+    shortcutsDumpFile.write('[]')
+    shortcutsDumpFile.close()
 
 #Scan for games in game paths. Skip for existing in shortcutsDump
-
 #DRM FREE
 #clean up existingShortcuts
 print '****Clean Up DRM Free****'
@@ -42,13 +47,13 @@ for existingShortcut in existingShortcuts:
 print '****New DRM Free****'
 newtargets = []
 for gameFolder in drmFreeGameFolders:
+    print gameFolder
     for root, subFolders, files in os.walk(gameFolder, topdown=False):
         for fileName in files:
             if any(fileName.find(acceptedFileType) != -1 for acceptedFileType in acceptedFileTypes):
                 target = os.path.abspath(os.path.join(root, fileName))
-                if any(existingShortcut['target'] == target for existingShortcut in existingShortcuts):
+                if all(existingShortcut['target'] != target for existingShortcut in existingShortcuts):
                     newtargets.append(target)
-
 
 #Get names for shortcuts/ignore
 for target in newtargets:
@@ -86,11 +91,12 @@ for target in newtargets:
 steamGameIds = []
 newSteamGameIds = []
 for gameFolder in steamGameFolders:
-     if any(fileName.find('.acf') != -1 for fileName in os.listdir(gameFolder)):
+    for fileName in os.listdir(gameFolder):
+        if fileName.find('.acf') != -1:
             steamGameId = fileName.strip('appmanifest_')
             steamGameId = steamGameId.strip('.acf')
             steamGameIds.append(steamGameId)
-            if any(existingShortcut['target'] == (steamShortcutBase + steamGameId) for existingShortcut in existingShortcuts):
+            if all(existingShortcut['target'] != (steamShortcutBase + steamGameId) for existingShortcut in existingShortcuts):
                 newSteamGameIds.append(steamGameId)
 
 #Clean up existingShortcuts
@@ -134,7 +140,7 @@ for steamGameId in newSteamGameIds:
 
 #Generate shortcuts
 print '****Creating****'
-shell = Dispatch('WScript.Shell')
+#shell = Dispatch('WScript.Shell')
 for newShortcut in newShortcuts:
     if newShortcut['shortcut']:
         print newShortcut['shortcut'] + ' : Shortcut'
@@ -144,11 +150,13 @@ for newShortcut in newShortcuts:
             shortcut.Targetpath = newShortcut['target']
             shortcut.WorkingDirectory = newShortcut['workingDirectory']
             shortcut.save()
+            print 'reg Short Cut'
         else:
             shortcut = file(newShortcut['shortcut'], 'w')
             shortcut.write('[InternetShortcut]\n')
             shortcut.write('URL=%s' % newShortcut['target'])
             shortcut.close()
+            print 'url shortcut'
 
 
 #Update shortcutsDump 
